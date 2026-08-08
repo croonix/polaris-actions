@@ -1,15 +1,28 @@
-# CI pipeline for polaris-actions — PLACEHOLDER.
+# CI pipeline for polaris-actions.
 #
-# This is a minimal, non-broken placeholder for the scaffold task (plan
-# 278-polaris-actions-repo-and-e2e, step E1). The real hermetic CI —
-# lint + unit tests with mocked getIDToken/Warden, a REQUIRED dist/
-# freshness check (rebuild + `git diff --exit-code login/dist`), and
-# actionlint/SHA-pin enforcement — is built out by Rin in a later task
-# per RFC 030 §5.5. Do not treat this as the final contract.
+# Per RFC 030 §5.5, this workflow provides:
+#   1. Hermetic lint + unit tests (no network access required by the suite
+#      itself — getIDToken and the Warden exchange are fully mocked).
+#   2. A REQUIRED dist/ freshness gate: rebuild via `ncc` and fail if the
+#      rebuilt bundle differs from the committed `login/dist/`. A stale
+#      committed bundle is the classic JS-action bug — source looks fixed,
+#      consumers still run the old code.
+#   3. A REQUIRED, machine-enforced SHA-pin check (RFC 030 DEF-5): every
+#      `uses:` reference in every workflow under .github/workflows/ must be
+#      pinned to a full 40-character commit SHA. Tool: zizmor's
+#      `unpinned-uses` audit rule, run via the official zizmor-action.
+#      Verified non-vacuous: a temporarily-unpinned `uses: actions/checkout@v7`
+#      makes this rule fail (exit 14, `error[unpinned-uses]`); restoring the
+#      SHA pin makes it pass (exit 0). See plan 278-polaris-actions-repo-and-e2e
+#      step E1 Task 4 for the full transcript.
+#
+# Job/check names are stable and intended for E2 to wire up as required
+# status checks once branch protection is added to this repo.
 #
 # SHA-pinned actions:
-#   actions/checkout   v7.0.1 → 3d3c42e5aac5ba805825da76410c181273ba90b1
-#   actions/setup-node v7.0.0 → 820762786026740c76f36085b0efc47a31fe5020
+#   actions/checkout          v7.0.1 → 3d3c42e5aac5ba805825da76410c181273ba90b1
+#   actions/setup-node        v7.0.0 → 820762786026740c76f36085b0efc47a31fe5020
+#   zizmorcore/zizmor-action  v0.6.2 → 3dc1ecc9bcb9e94e9b2c709687979e1298497054
 
 name: CI
 
@@ -18,13 +31,20 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  placeholder:
-    name: Build (placeholder)
+  lint-and-test:
+    name: Lint & test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -37,5 +57,56 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint (typecheck only — placeholder)
+      - name: Lint (tsc --noEmit)
         run: pnpm run lint
+
+      - name: Test (vitest — hermetic, mocked getIDToken/Warden)
+        run: pnpm run test
+
+  dist-freshness:
+    name: dist/ freshness
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Rebuild login/dist via ncc
+        run: pnpm run build
+
+      - name: Fail if committed dist/ is stale
+        run: git diff --exit-code login/dist
+
+  sha-pin-check:
+    name: Actions SHA-pin enforcement
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor (unpinned-uses rule enforced via --min-severity=high)
+        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          inputs: .github/workflows
+          min-severity: high
+          min-confidence: high
+          advanced-security: false
+          annotations: true
