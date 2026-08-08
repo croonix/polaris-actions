@@ -1,0 +1,45 @@
+name: 'Polaris login'
+description: 'Authenticate to a Polaris instance using GitHub Actions OIDC (no static token).'
+author: 'croonix'
+branding:
+  icon: 'lock'
+  color: 'blue'
+
+inputs:
+  polaris-url:
+    description: 'Base URL of the Polaris instance (e.g. https://polaris.example.com).'
+    required: true
+  audience:
+    description: >
+      OIDC audience to request. Must match the Polaris instance expectation.
+      Defaults to the host of polaris-url (per-instance audience, D-16).
+      Set explicitly to "polaris" only for instances using the documented
+      global fallback audience.
+    required: false
+                                # no static default — derived from polaris-url's
+                                # host at runtime; see D-16 / resolved Q2
+  account:
+    description: 'Polaris account slug. Required only if the repo is trusted in more than one account.'
+    required: false
+  export-tf-token:
+    description: 'Export TF_TOKEN_<host> to $GITHUB_ENV for subsequent tofu/terraform steps.'
+    required: false
+    default: 'true'
+  mask-token:
+    description: 'Register the minted token as a secret so it is masked in logs. Keep true.'
+    required: false
+    default: 'true'
+
+outputs:
+  access-token:
+    description: 'The minted Polaris access token. Masked. Prefer export-tf-token over consuming this.'
+  expires-in:
+    description: 'Token lifetime in seconds.'
+  account:
+    description: 'The Polaris account slug the token is scoped to.'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
+  # No `post:` step: a login action has nothing to clean up (RFC 030 §5.5).
+  # This is deliberate, not an oversight.

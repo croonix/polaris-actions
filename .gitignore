@@ -1,0 +1,9 @@
+# Dependencies — reinstalled via pnpm-lock.yaml; never commit.
+node_modules/
+
+# Dev environment — never commit real secrets.
+.env
+
+# NOTE: login/dist/ is intentionally NOT ignored. Committed dist/ output
+# is required for JavaScript GitHub Actions (RFC 030 §5.1) — consumers
+# run the bundle directly, with no build step of their own.

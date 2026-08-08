@@ -1,0 +1,41 @@
+# CI pipeline for polaris-actions — PLACEHOLDER.
+#
+# This is a minimal, non-broken placeholder for the scaffold task (plan
+# 278-polaris-actions-repo-and-e2e, step E1). The real hermetic CI —
+# lint + unit tests with mocked getIDToken/Warden, a REQUIRED dist/
+# freshness check (rebuild + `git diff --exit-code login/dist`), and
+# actionlint/SHA-pin enforcement — is built out by Rin in a later task
+# per RFC 030 §5.5. Do not treat this as the final contract.
+#
+# SHA-pinned actions:
+#   actions/checkout   v7.0.1 → 3d3c42e5aac5ba805825da76410c181273ba90b1
+#   actions/setup-node v7.0.0 → 820762786026740c76f36085b0efc47a31fe5020
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  placeholder:
+    name: Build (placeholder)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (typecheck only — placeholder)
+        run: pnpm run lint

@@ -1,0 +1,24 @@
+{
+  "name": "polaris-actions",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Polaris login GitHub Action — GitHub OIDC to Polaris access-token exchange.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.1.3+sha512.c85357fe17ca12dd23dd7071822666dfd7e3cb76fe214e3370b5ea2fb34f2a231185509b63e717f3cd0acb38dd3f8d82bcd5e8172400ae678b70ea4fbed0896d",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "ncc build login/src/index.ts -o login/dist",
+    "test": "echo \"no tests yet — scaffold only\"",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@actions/core": "3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "@vercel/ncc": "0.44.1",
+    "typescript": "6.0.3"
+  }
+}
