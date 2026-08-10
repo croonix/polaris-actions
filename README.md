@@ -16,9 +16,7 @@ product code of its own).
 
 These three repos have similar names and it is easy to `uses:` the wrong one.
 If you are here to authenticate a Terraform/OpenTofu-against-Polaris workflow,
-you are in the right place. See RFC 030 (`030-github-actions-oidc-wif-login`,
-§5.0 / decision D-25) for the full separation rationale — including the
-residual, explicitly-unresolved naming-confusability risk between these repos.
+you are in the right place.
 
 ## What this is
 
@@ -31,10 +29,14 @@ picks it up automatically.
 
 ## Usage
 
-**Always pin by commit SHA, never by a floating tag like `@v1` in your own
-audit trail** — the `v1` tag documented below is a convenience alias that
-moves forward on every `v1.x.y` release (see `login/action.yml` and RFC 030
-decision D-26). The SHA is the actual contract.
+**Always pin by commit SHA, never by a floating tag like `@v1`, in your own
+audit trail.** The `v1` tag is a convenience alias that moves forward on
+every `v1.x.y` release, so it always points at the latest patch — handy for
+browsing the repo, but it means the code that actually runs in your pipeline
+can change without a corresponding change in your own workflow file. Pinning
+by SHA makes the contract explicit: what you see in your diff is exactly what
+runs. Use the `# vX.Y.Z` comment purely as a human-readable label next to the
+pinned SHA.
 
 ### With OpenTofu
 
@@ -97,8 +99,10 @@ permission not listed is implicitly denied.
 ## Inputs / outputs
 
 See [`login/action.yml`](login/action.yml) for the full, current contract.
-Input and output names are a one-way door for external consumers once pinned
-— see RFC 030 D-26 for the ratification process before `v1.0.0` is tagged.
+Input and output names are part of this action's public contract: once
+external workflows pin to a released version, renaming or removing an input
+or output is a breaking change for them. For that reason, names are reviewed
+carefully before each release — especially before `v1.0.0`.
 
 ## Development
 
