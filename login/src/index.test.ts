@@ -10,36 +10,39 @@
  *     at module bottom, NEVER call unconditionally at module scope (the current stub does this,
  *     which is exactly why every test below currently fails at import time — that must change)
  * @behavior
- *   - tfTokenEnvName: `TF_TOKEN_` + host AS-IS (NO uppercasing) + `.`→`_`, `-`→`__` (R-11 CORRECTED;
- *     rev-2's "uppercase, `.`/`-`→`_`" rule was verified wrong against OpenTofu's own docs)
+ *   - tfTokenEnvName: `TF_TOKEN_` + host AS-IS (NO uppercasing) + `.`→`_`, `-`→`__`. This mangling
+ *     rule was verified against OpenTofu's own docs — an earlier draft of this rule wrongly
+ *     uppercased the host and mangled both `.` and `-` to a single underscore, which is wrong.
  *   - canonicalizeAudienceHost: IDENTICAL algorithm to Warden's `CanonicalizeAudience`
- *     (polaris/services/identity/internal/config/config.go) — lowercase, bare host, default port
+ *     (Polaris's identity-service config package) — lowercase, bare host, default port
  *     (443/80) omitted, non-default port retained, IDN as punycode, REJECTS ASCII-only-Punycode
  *     labels (the GO-2026-5026/CVE-2026-39821 class). Vectors below are imported verbatim from
- *     polaris's `audience_punycode_test.go`, not re-derived.
+ *     Polaris's audience punycode test suite, not re-derived.
  *   - deriveAudience: explicit non-empty `audience` input wins VERBATIM (no canonicalization — it
  *     may legitimately be the literal fallback string "polaris"); otherwise canonicalize the host
- *     of `polarisUrl`. No static default exists in action.yml by design (D-16).
+ *     of `polarisUrl`. No static default exists in action.yml by design — the correct audience
+ *     always depends on which Polaris instance is being called.
  *   - exchangeGithubOidc: POST `${polarisUrl}/api/v2/auth/github-oidc`, body `{id_token, account?}`
  *     (`account` key omitted when absent), `Content-Type: application/json`, NO `Authorization`
- *     header. 429/503 WITH `Retry-After`: parse as integer delta-seconds, wait, retry (RFC gives no
- *     retry cap). Any other 4xx (incl. 429/503 WITHOUT `Retry-After` — RFC silent on this combination,
- *     see edge-cases): throw `GithubOidcExchangeError` immediately, never retry.
+ *     header. 429/503 WITH `Retry-After`: parse as integer delta-seconds, wait, retry (no
+ *     retry cap is defined). Any other 4xx (incl. 429/503 WITHOUT `Retry-After` — behavior for
+ *     this combination was not pre-specified, see edge-cases): throw `GithubOidcExchangeError`
+ *     immediately, never retry.
  *   - run(): `getIDToken(deriveAudience(...))` → `exchangeGithubOidc(...)` → `core.setSecret(token)`
  *     BEFORE any other call touches the token → `setOutput` x3 (`access-token`,`expires-in`,`account`)
  *     → if `export-tf-token !== 'false'`: `exportVariable(tfTokenEnvName(host), token)`. On failure:
  *     `core.setFailed(`code: description`)`, and `run()` resolves normally (never throws out).
  * @edge-cases
- *   - 429/503 WITHOUT `Retry-After`: Shin's filled-in fallback (RFC does not define this combination)
- *     — treated as TERMINAL, no wait, immediate failure. Flagged for Kou/rodo confirmation.
+ *   - 429/503 WITHOUT `Retry-After`: Shin's filled-in fallback (this combination was left
+ *     undefined upstream) — treated as TERMINAL, no wait, immediate failure. Flagged for
+ *     Kou/rodo confirmation.
  *   - Host with a non-default port passed to `tfTokenEnvName`: colon is left unmangled (OpenTofu's
  *     docs do not cover ports — documented limitation, not a valid POSIX env-var name, deterministic)
  *   - `mask-token: 'false'` → `core.setSecret` NOT called for the access token (the id_token itself is
  *     still auto-masked inside `core.getIDToken`, outside this action's control)
  *   - `core.getIDToken()` itself rejecting (e.g. missing `id-token: write`) → `run()` catches, calls
  *     `setFailed`, does not throw
- * @see .yui-soul/rfcs/approved/030-github-actions-oidc-wif-login/README.md §4.1, §5.3, D-16, R-11, R2-7
- * @see polaris/services/identity/internal/config/audience_punycode_test.go (imported test vectors)
+ * @see Polaris's identity-service audience punycode test suite (imported test vectors)
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -57,7 +60,7 @@ vi.mock('@actions/core', () => ({
 }))
 
 // ---------------------------------------------------------------------------
-// Section 1: TF_TOKEN_<host> mangling (R-11 CORRECTED rule)
+// Section 1: TF_TOKEN_<host> mangling
 // ---------------------------------------------------------------------------
 
 describe('tfTokenEnvName', () => {
@@ -66,11 +69,11 @@ describe('tfTokenEnvName', () => {
     expect(tfTokenEnvName('polaris.croonix.tech')).toBe('TF_TOKEN_polaris_croonix_tech')
   })
 
-  it('mangles a hyphenated host to a DOUBLE underscore, not single (the rev-2 regression case)', async () => {
+  it('mangles a hyphenated host to a DOUBLE underscore, not single (the regression case this guards against)', async () => {
     const { tfTokenEnvName } = await import('./index.js')
-    // This is THE case that broke under rev 2's wrong rule ("uppercase, - -> _") — the dev host
-    // is hyphenated, and a single-underscore mangling silently produces the wrong env var name,
-    // surfacing as a "no credentials found" failure with no clue why.
+    // This is THE case that broke under an earlier, wrong mangling rule ("uppercase, - -> _") —
+    // the dev host is hyphenated, and a single-underscore mangling silently produces the wrong
+    // env var name, surfacing as a "no credentials found" failure with no clue why.
     expect(tfTokenEnvName('polaris-dev.croonix.tech')).toBe('TF_TOKEN_polaris__dev_croonix_tech')
   })
 
@@ -79,7 +82,7 @@ describe('tfTokenEnvName', () => {
     expect(tfTokenEnvName('polaris.localhost')).toBe('TF_TOKEN_polaris_localhost')
   })
 
-  it('does NOT uppercase the host (the exact rev-2 mistake this rule corrects)', async () => {
+  it('does NOT uppercase the host (the exact mistake this rule corrects)', async () => {
     const { tfTokenEnvName } = await import('./index.js')
     const result = tfTokenEnvName('polaris.croonix.tech')
     expect(result).not.toBe(result.toUpperCase())
@@ -88,19 +91,20 @@ describe('tfTokenEnvName', () => {
 
   it('leaves a non-default port unmangled (documented limitation — OpenTofu docs do not cover ports)', async () => {
     const { tfTokenEnvName } = await import('./index.js')
-    // Not addressable per RFC 030 R-11: the colon survives verbatim, producing a deterministic but
-    // NOT-a-valid-POSIX-env-var-name string. This test pins the CURRENT documented behavior, not a
-    // claim that the result is usable — it exists so a future "helpful" fix to strip/reject the port
-    // is a deliberate decision, not an accidental behavior change.
+    // Not addressable per the mangling rule: the colon survives verbatim, producing a
+    // deterministic but NOT-a-valid-POSIX-env-var-name string. This test pins the CURRENT
+    // documented behavior, not a claim that the result is usable — it exists so a future
+    // "helpful" fix to strip/reject the port is a deliberate decision, not an accidental
+    // behavior change.
     expect(tfTokenEnvName('polaris.example:8443')).toBe('TF_TOKEN_polaris_example:8443')
   })
 })
 
 // ---------------------------------------------------------------------------
 // Section 2: audience canonicalization — IDENTICAL algorithm to Warden's
-// CanonicalizeAudience (D-16). Vectors imported from
-// polaris/services/identity/internal/config/audience_punycode_test.go so the
-// two independent implementations are checked against the SAME table.
+// CanonicalizeAudience. Vectors imported from Polaris's identity-service
+// audience punycode test suite so the two independent implementations are
+// checked against the SAME table.
 // ---------------------------------------------------------------------------
 
 describe('canonicalizeAudienceHost — accepts (imported from Warden test vectors)', () => {
@@ -146,8 +150,9 @@ describe('canonicalizeAudienceHost — rejects ASCII-only Punycode (CVE-class gu
   // Each input is a malformed A-label: the "xn--" prefix promises Punycode, but the payload
   // decodes to pure ASCII. Accepting these silently collapses two DISTINCT audience strings onto
   // one canonical value (e.g. "xn--polaris-.example" and "polaris.example" both -> "polaris.example"),
-  // which defeats D-16's exact-match anti-replay guarantee. See GO-2026-5026 / CVE-2026-39821 and
-  // polaris/services/identity/internal/config/audience_punycode_test.go for the full history.
+  // which defeats the exact-match anti-replay guarantee this canonicalization is meant to provide.
+  // See GO-2026-5026 / CVE-2026-39821 and Polaris's identity-service audience punycode test suite
+  // for the full history.
   it.each([
     ['bare ascii-only punycode label', 'xn--polaris-.example'],
     ['ascii-only punycode label with scheme and trailing slash', 'https://xn--polaris-.example/'],
@@ -183,7 +188,7 @@ describe('deriveAudience', () => {
 
   it('uses an explicit audience input VERBATIM, bypassing derivation and canonicalization entirely', async () => {
     const { deriveAudience } = await import('./index.js')
-    // "polaris" is the documented global-fallback literal (D-16) — it is not a hostname and must
+    // "polaris" is the documented global-fallback literal — it is not a hostname and must
     // never be run through canonicalizeAudienceHost, which would reject or mangle it.
     expect(deriveAudience('https://polaris.example.com', 'polaris')).toBe('polaris')
   })

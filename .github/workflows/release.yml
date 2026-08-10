@@ -1,13 +1,12 @@
 # Release workflow for polaris-actions — PLACEHOLDER.
 #
-# This is a minimal, non-broken placeholder for the scaffold task (plan
-# 278-polaris-actions-repo-and-e2e, step E1). The real release logic —
-# tag (v*.*.*) -> build -> verify dist/ freshness -> create GitHub Release
-# -> force-move the v1 convenience tag via a GitHub App installation token
-# (actions/create-github-app-token), environment-gated with a required
-# reviewer — is specified in RFC 030 D-26 and built out in a later plan
-# step (E2/E3). Do not tag v1.0.0 against this placeholder; the
-# input/output name ratification gate (D-26) must happen first.
+# This is a minimal, non-broken placeholder scaffold. The real release
+# logic — tag (v*.*.*) -> build -> verify dist/ freshness -> create GitHub
+# Release -> force-move the v1 convenience tag via a GitHub App installation
+# token (actions/create-github-app-token), environment-gated with a required
+# reviewer — is designed but not yet built out. Do not tag v1.0.0 against
+# this placeholder; the action's input/output names must be finalized and
+# ratified first.
 #
 # SHA-pinned actions:
 #   actions/checkout v7.0.1 → 3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -27,5 +26,5 @@ jobs:
 
       - name: Not implemented
         run: |
-          echo "release.yml is a placeholder. Real release logic (D-26) lands in a later plan step."
+          echo "release.yml is a placeholder. Real release logic lands in a later step."
           exit 0

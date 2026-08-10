@@ -12,12 +12,14 @@ inputs:
   audience:
     description: >
       OIDC audience to request. Must match the Polaris instance expectation.
-      Defaults to the host of polaris-url (per-instance audience, D-16).
+      Defaults to the host of polaris-url (per-instance audience).
       Set explicitly to "polaris" only for instances using the documented
       global fallback audience.
     required: false
-                                # no static default — derived from polaris-url's
-                                # host at runtime; see D-16 / resolved Q2
+                                # No static default here: the audience is computed
+                                # from polaris-url's host at runtime, since each
+                                # Polaris instance expects its own hostname as the
+                                # audience by default.
   account:
     description: 'Polaris account slug. Required only if the repo is trusted in more than one account.'
     required: false
@@ -41,5 +43,6 @@ outputs:
 runs:
   using: 'node24'
   main: 'dist/index.js'
-  # No `post:` step: a login action has nothing to clean up (RFC 030 §5.5).
-  # This is deliberate, not an oversight.
+  # No `post:` step: this action only authenticates and mints a token — it
+  # doesn't create any files, processes, or state on the runner that would
+  # need to be torn down afterwards. There's nothing to clean up.

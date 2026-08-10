@@ -1,20 +1,19 @@
 # CI pipeline for polaris-actions.
 #
-# Per RFC 030 §5.5, this workflow provides:
+# This workflow provides:
 #   1. Hermetic lint + unit tests (no network access required by the suite
 #      itself — getIDToken and the Warden exchange are fully mocked).
 #   2. A REQUIRED dist/ freshness gate: rebuild via `ncc` and fail if the
 #      rebuilt bundle differs from the committed `login/dist/`. A stale
 #      committed bundle is the classic JS-action bug — source looks fixed,
 #      consumers still run the old code.
-#   3. A REQUIRED, machine-enforced SHA-pin check (RFC 030 DEF-5): every
-#      `uses:` reference in every workflow under .github/workflows/ must be
-#      pinned to a full 40-character commit SHA. Tool: zizmor's
-#      `unpinned-uses` audit rule, run via the official zizmor-action.
+#   3. A REQUIRED, machine-enforced SHA-pin check: every `uses:` reference
+#      in every workflow under .github/workflows/ must be pinned to a full
+#      40-character commit SHA. Tool: zizmor's `unpinned-uses` audit rule,
+#      run via the official zizmor-action.
 #      Verified non-vacuous: a temporarily-unpinned `uses: actions/checkout@v7`
 #      makes this rule fail (exit 14, `error[unpinned-uses]`); restoring the
-#      SHA pin makes it pass (exit 0). See plan 278-polaris-actions-repo-and-e2e
-#      step E1 Task 4 for the full transcript.
+#      SHA pin makes it pass (exit 0).
 #
 # Job/check names are stable and intended for E2 to wire up as required
 # status checks once branch protection is added to this repo.

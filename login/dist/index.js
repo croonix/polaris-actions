@@ -30967,14 +30967,13 @@ function getIDToken(aud) {
 //
 // GitHub-OIDC -> Polaris access-token exchange.
 //
-// Implements the GitHub Action described in RFC 030 (§5) "The
-// croonix/polaris-actions repository": request a GitHub Actions OIDC
-// id_token, exchange it with a Polaris instance's github-oidc endpoint,
-// mask + surface the minted access token, and optionally export
-// TF_TOKEN_<host> for subsequent tofu/terraform steps.
+// Implements the "croonix/polaris-actions" GitHub Action: request a
+// GitHub Actions OIDC id_token, exchange it with a Polaris instance's
+// github-oidc endpoint, mask + surface the minted access token, and
+// optionally export TF_TOKEN_<host> for subsequent tofu/terraform steps.
 
 // ---------------------------------------------------------------------------
-// TF_TOKEN_<host> env var name (R-11 CORRECTED)
+// TF_TOKEN_<host> env var name
 // ---------------------------------------------------------------------------
 /**
  * Derives the OpenTofu/Terraform CLI credential env var name for a given
@@ -30997,9 +30996,9 @@ function tfTokenEnvName(host) {
 // CanonicalizeAudience (polaris/services/identity/internal/config/config.go).
 // ---------------------------------------------------------------------------
 /**
- * Canonicalizes an audience host string to RFC 030 D-16's canonical form:
- * lowercase, bare host with no scheme, default port (443/80) omitted,
- * non-default port retained, IDN encoded as punycode.
+ * Canonicalizes an audience host string to its canonical form: lowercase,
+ * bare host with no scheme, default port (443/80) omitted, non-default
+ * port retained, IDN encoded as punycode.
  *
  * MUST stay byte-for-byte compatible with Warden's Go implementation — see
  * config.go's CanonicalizeAudience — since the exchange this feeds is an
@@ -31043,7 +31042,9 @@ function canonicalizeAudienceHost(raw) {
  * input wins verbatim (it may legitimately be the literal fallback string
  * "polaris" and must never be run through canonicalization). Otherwise,
  * the canonicalized host of `polarisUrl` is used. There is no static
- * default in action.yml by design (D-16).
+ * default in action.yml by design — this action intentionally never
+ * hardcodes an audience string, since the correct value depends on the
+ * Polaris instance the caller is talking to.
  */
 function deriveAudience(polarisUrl, explicitAudience) {
     if (explicitAudience !== undefined && explicitAudience !== '') {
