@@ -1,25 +1,5 @@
 # croonix/polaris-actions
 
-**This is `croonix/polaris-actions`.** It is **not** `croonix/int-polaris-actions`
-(the pre-existing, private, general-purpose Croonix Actions hub for internal
-Azure/OpenTofu pipelines) and it is **not** `croonix/polaris-actions-e2e` (a
-private, throwaway, `workflow_dispatch`-only smoke-test harness that exercises
-this repo's `login` action against a dev Polaris instance — it holds no
-product code of its own).
-
-| | `croonix/polaris-actions` (this repo) | `croonix/int-polaris-actions` | `croonix/polaris-actions-e2e` |
-|---|---|---|---|
-| Role | Polaris-product-specific login action | General-purpose internal Actions hub | Smoke-test harness for this repo |
-| Visibility | **Public** | Private | Private |
-| Consumed by | Any repo, any org, pinned by commit SHA | Croonix-internal repos only | Nobody — it's a test fixture |
-| Versioning | Semver + SHA-pinned (`v1` convenience tag, see below) | `@latest` moving tag | N/A |
-
-These three repos have similar names and it is easy to `uses:` the wrong one.
-If you are here to authenticate a Terraform/OpenTofu-against-Polaris workflow,
-you are in the right place.
-
-## What this is
-
 A GitHub Action that authenticates to a [Polaris](https://github.com/croonix/polaris)
 instance using GitHub Actions OIDC (workload identity federation) — no static,
 long-lived credential stored as a repo secret. It exchanges the workflow run's
@@ -27,16 +7,17 @@ GitHub-issued `id_token` for a short-lived Polaris access token, and optionally
 exports `TF_TOKEN_<host>` so Terraform/OpenTofu's native `cloud`/`remote` backend
 picks it up automatically.
 
+- No static credentials — authentication is short-lived and per-run
+- Works with both OpenTofu and HashiCorp Terraform
+- Optional automatic `TF_TOKEN_<host>` export for zero-config backend auth
+- Token is registered as a masked secret by default
+
 ## Usage
 
 **Always pin by commit SHA, never by a floating tag like `@v1`, in your own
-audit trail.** The `v1` tag is a convenience alias that moves forward on
-every `v1.x.y` release, so it always points at the latest patch — handy for
-browsing the repo, but it means the code that actually runs in your pipeline
-can change without a corresponding change in your own workflow file. Pinning
-by SHA makes the contract explicit: what you see in your diff is exactly what
-runs. Use the `# vX.Y.Z` comment purely as a human-readable label next to the
-pinned SHA.
+audit trail** — the `v1` tag documented below is a convenience alias that
+moves forward on every `v1.x.y` release. The SHA is the actual contract; the
+tag is just a human-friendly pointer to it.
 
 ### With OpenTofu
 
@@ -96,13 +77,26 @@ workflow level), which is the correct least-privilege posture — declaring
 `contents: read` explicitly turns the block into an allowlist, so any
 permission not listed is implicitly denied.
 
-## Inputs / outputs
+## Inputs
 
-See [`login/action.yml`](login/action.yml) for the full, current contract.
-Input and output names are part of this action's public contract: once
-external workflows pin to a released version, renaming or removing an input
-or output is a breaking change for them. For that reason, names are reviewed
-carefully before each release — especially before `v1.0.0`.
+| Input | Description | Required | Default |
+|---|---|---|---|
+| `polaris-url` | Base URL of the Polaris instance (e.g. `https://polaris.example.com`). | Yes | — |
+| `audience` | OIDC audience to request. Must match the Polaris instance's expectation. If unset, defaults at runtime to the host of `polaris-url` (per-instance audience). Set explicitly to `"polaris"` only for instances using the documented global fallback audience. | No | *(derived from `polaris-url`'s host at runtime)* |
+| `account` | Polaris account slug. Required only if the repo is trusted in more than one account. | No | — |
+| `export-tf-token` | Export `TF_TOKEN_<host>` to `$GITHUB_ENV` for subsequent tofu/terraform steps. | No | `true` |
+| `mask-token` | Register the minted token as a secret so it is masked in logs. Keep `true` unless you have a specific reason not to. | No | `true` |
+
+## Outputs
+
+| Output | Description |
+|---|---|
+| `access-token` | The minted Polaris access token. Masked. Prefer `export-tf-token` over consuming this directly. |
+| `expires-in` | Token lifetime, in seconds. |
+| `account` | The Polaris account slug the token is scoped to. |
+
+Input and output names are a public contract once this action is pinned by
+consumers — they don't change casually across releases.
 
 ## Development
 
@@ -118,14 +112,8 @@ pnpm run test
 directly with no build step on the consumer's side. CI enforces that the
 committed bundle matches a fresh rebuild (dist-freshness check).
 
-## Standing obligations
-
-- **Runtime deprecation**: this action currently targets `node24`
-  (`runs.using` in `login/action.yml`). Dependabot does not surface `runs.using`
-  migrations — bumping to the next Actions runtime when `node24` is deprecated
-  is a manually-tracked obligation, not automated.
-- **SHA pinning**: every third-party `uses:` in this repo's own workflows is
-  pinned to a commit SHA with a `# vX.Y.Z` version comment. No floating tags.
+This action currently targets the `node24` Actions runtime. When that runtime
+is deprecated, a bump will ship as a new release.
 
 ## License
 
