@@ -121,16 +121,20 @@ jobs:
       - name: Force-move major-version alias to this commit
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
         run: |
-          # github.ref_name is the pushed tag, e.g. "v1.4.2" or "v0.0.1".
-          # Derive the major-alias name (e.g. "v1") from it — never
-          # hardcoded — so a v0.0.1 dry-run tag can only ever move a "v0"
-          # alias and can never touch the real v1.
-          TAG="${{ github.ref_name }}"
+          # TAG is the pushed tag, e.g. "v1.4.2" or "v0.0.1". Derive the
+          # major-alias name (e.g. "v1") from it — never hardcoded — so a
+          # v0.0.1 dry-run tag can only ever move a "v0" alias and can
+          # never touch the real v1. All template expressions are passed
+          # via env: above, not interpolated directly into the script, to
+          # avoid shell/code-injection via template expansion.
           MAJOR_ALIAS="v$(echo "$TAG" | sed -E 's/^v([0-9]+)\..*/\1/')"
           echo "Moving major alias '${MAJOR_ALIAS}' -> ${GITHUB_SHA} (tag ${TAG})"
-          git config user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
-          git config user.email "${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git"
           git tag -f "${MAJOR_ALIAS}" "${GITHUB_SHA}"
           git push -f origin "${MAJOR_ALIAS}"
