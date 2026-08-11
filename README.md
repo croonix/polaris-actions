@@ -37,8 +37,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Authenticate to Polaris
-        # Real pin: a 40-char commit SHA + version comment. Never copy `@<sha>` literally.
-        uses: croonix/polaris-actions/login@<sha>   # v1.0.0
+        uses: croonix/polaris-actions/login@a4c75011c8c7a2d758abaaa0c17f0de49fbb6f1c # v1.0.0
         with:
           polaris-url: https://polaris.example.com
 
@@ -64,7 +63,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Authenticate to Polaris
-        uses: croonix/polaris-actions/login@<sha>   # v1.0.0
+        uses: croonix/polaris-actions/login@a4c75011c8c7a2d758abaaa0c17f0de49fbb6f1c # v1.0.0
         with:
           polaris-url: https://polaris.example.com
 
