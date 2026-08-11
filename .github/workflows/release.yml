@@ -1,30 +1,148 @@
-# Release workflow for polaris-actions — PLACEHOLDER.
+# Release workflow for polaris-actions.
 #
-# This is a minimal, non-broken placeholder scaffold. The real release
-# logic — tag (v*.*.*) -> build -> verify dist/ freshness -> create GitHub
-# Release -> force-move the v1 convenience tag via a GitHub App installation
-# token (actions/create-github-app-token), environment-gated with a required
-# reviewer — is designed but not yet built out. Do not tag v1.0.0 against
-# this placeholder; the action's input/output names must be finalized and
-# ratified first.
+# Trigger: push of a `v*.*.*`-shaped tag (immutable, semver point release).
+#
+# What this workflow does, in order:
+#   1. Mint a short-lived GitHub App installation token via
+#      actions/create-github-app-token. The App is installed on THIS repo
+#      ONLY (croonix/polaris-actions) and is the sole identity permitted to
+#      bypass tag protection and move a major-alias tag (`v1`, `v2`, ...) —
+#      see A5/A11 in the plan and D-26 in RFC 030. A PAT would be a
+#      long-lived, exfiltratable secret on a PUBLIC credential-path repo;
+#      GITHUB_TOKEN cannot bypass tag protection at all. Neither clears the
+#      bar; the App token does.
+#   2. Build (pnpm install --frozen-lockfile && pnpm run build).
+#   3. Re-verify dist/ freshness — rebuild and diff against the committed
+#      bundle, same pattern as ci.yml's dist-freshness job. A stale bundle
+#      must never be published under a tag consumers resolve, even though
+#      ci.yml already checked this on the PR that produced the tagged
+#      commit — trust the artifact under release, not the memory of an
+#      earlier check.
+#   4. Create a GitHub Release for the tag.
+#   5. Force-move the MAJOR alias tag (`v<major>`, derived from the pushed
+#      tag — `v1` for a `v1.x.y` push, `v2` for a `v2.x.y` push, etc.) to
+#      the same commit and push it. This is the ONLY place any major alias
+#      is ever moved — never by hand, never from a developer machine.
+#
+# ---------------------------------------------------------------------------
+# Major-alias versioning semantics (read this before touching this file):
+#
+#   `v1` ADVANCES on every `v1.x.y` release — patch AND minor both move it.
+#   `v1` NEVER crosses a major version bump. A breaking change ships as a
+#   NEW major tag (`v2.0.0`), and THIS SAME WORKFLOW derives and creates its
+#   OWN NEW alias (`v2`) from that push — no workflow edit needed. `v1` stops
+#   advancing forever at that point and keeps pointing at the last v1.x.y
+#   commit — it does NOT get deleted or repointed to v2. The alias name is
+#   computed from the tag being released, never hardcoded, precisely so a
+#   throwaway `v0.0.1`-shaped dry-run tag only ever touches a `v0` alias and
+#   can never collide with (or move) the real `v1`.
+# ---------------------------------------------------------------------------
+#
+# NOTE: release-please is deliberately NOT used here. This repo's release
+# cadence is a manually-cut, ratified `v*.*.*` tag (see plan 278 E3's
+# input/output-name ratification gate) — not an automated changelog-driven
+# PR-merge release train. Do not wire release-please into this workflow.
 #
 # SHA-pinned actions:
-#   actions/checkout v7.0.1 → 3d3c42e5aac5ba805825da76410c181273ba90b1
+#   actions/checkout               v7.0.1 → 3d3c42e5aac5ba805825da76410c181273ba90b1
+#   actions/setup-node             v7.0.0 → 820762786026740c76f36085b0efc47a31fe5020
+#   actions/create-github-app-token v3.2.0 → bcd2ba49218906704ab6c1aa796996da409d3eb1
+#   softprops/action-gh-release     v3.0.2 → 3d0d9888cb7fd7b750713d6e236d1fcb99157228
 
 name: Release
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
 
 jobs:
-  placeholder:
-    name: Release (placeholder — not implemented)
+  release:
+    name: Release
     runs-on: ubuntu-latest
+    # Gated behind the `release` environment's required reviewer (A8/D-26):
+    # a tag push alone can never move the major alias or cut a Release
+    # without a human approval in between.
+    environment: release
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # need full history/tags for the major-alias move below
 
-      - name: Not implemented
+      - name: Mint release App installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          # `client-id` is the current, non-deprecated input as of v3.x.
+          # `app-id` still works but is marked deprecated in the action's own
+          # manifest ("Use 'client-id' instead") — decided in favor of
+          # client-id for that reason. RELEASE_APP_ID remains set as an
+          # extra/unused repo secret; this workflow intentionally does not
+          # reference it.
+          #
+          # NOTE: all three of RELEASE_APP_ID / RELEASE_CLIENT_ID /
+          # RELEASE_APP_PRIVATE_KEY were created as repo SECRETS (verified
+          # live via `gh api repos/croonix/polaris-actions/actions/secrets`
+          # and `.../actions/variables` returning zero entries), not repo
+          # VARIABLES as the plan's E2 notes assumed. Referencing
+          # `secrets.RELEASE_CLIENT_ID` here — not `vars.RELEASE_CLIENT_ID`
+          # — matches the actual live configuration.
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write # needed to create the Release and push the major-alias tag
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Re-verify dist/ freshness
+        # Same pattern as ci.yml's dist-freshness job: rebuild and diff.
+        # A stale committed bundle must never be published under a tag
+        # consumers resolve, even though the tagged commit already passed
+        # this check as a PR — verify the artifact under release, don't
+        # trust an earlier check's memory.
+        run: git diff --exit-code login/dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          generate_release_notes: true
+
+      - name: Force-move major-version alias to this commit
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
         run: |
-          echo "release.yml is a placeholder. Real release logic lands in a later step."
-          exit 0
+          # TAG is the pushed tag, e.g. "v1.4.2" or "v0.0.1". Derive the
+          # major-alias name (e.g. "v1") from it — never hardcoded — so a
+          # v0.0.1 dry-run tag can only ever move a "v0" alias and can
+          # never touch the real v1. All template expressions are passed
+          # via env: above, not interpolated directly into the script, to
+          # avoid shell/code-injection via template expansion.
+          MAJOR_ALIAS="v$(echo "$TAG" | sed -E 's/^v([0-9]+)\..*/\1/')"
+          echo "Moving major alias '${MAJOR_ALIAS}' -> ${GITHUB_SHA} (tag ${TAG})"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git"
+          git tag -f "${MAJOR_ALIAS}" "${GITHUB_SHA}"
+          git push -f origin "${MAJOR_ALIAS}"
