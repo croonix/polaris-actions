@@ -83,10 +83,18 @@ jobs:
           # `client-id` is the current, non-deprecated input as of v3.x.
           # `app-id` still works but is marked deprecated in the action's own
           # manifest ("Use 'client-id' instead") — decided in favor of
-          # client-id for that reason. vars.RELEASE_APP_ID remains set as an
-          # extra/unused repo variable; this workflow intentionally does not
+          # client-id for that reason. RELEASE_APP_ID remains set as an
+          # extra/unused repo secret; this workflow intentionally does not
           # reference it.
-          client-id: ${{ vars.RELEASE_CLIENT_ID }}
+          #
+          # NOTE: all three of RELEASE_APP_ID / RELEASE_CLIENT_ID /
+          # RELEASE_APP_PRIVATE_KEY were created as repo SECRETS (verified
+          # live via `gh api repos/croonix/polaris-actions/actions/secrets`
+          # and `.../actions/variables` returning zero entries), not repo
+          # VARIABLES as the plan's E2 notes assumed. Referencing
+          # `secrets.RELEASE_CLIENT_ID` here — not `vars.RELEASE_CLIENT_ID`
+          # — matches the actual live configuration.
+          client-id: ${{ secrets.RELEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           permission-contents: write # needed to create the Release and push the major-alias tag
 
