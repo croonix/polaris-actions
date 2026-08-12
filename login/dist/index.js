@@ -31384,8 +31384,9 @@ function sleep(ms) {
  *
  * Retry semantics: a 429 or 503 response WITH a `Retry-After` header is
  * retried after waiting the advertised integer delta-seconds, with no
- * retry cap. Any other 4xx — including a 429/503 WITHOUT `Retry-After` —
- * is terminal: throws `GithubOidcExchangeError` immediately, never retries.
+ * retry cap. Any other 4xx — including a 429/503 WITHOUT `Retry-After`, or
+ * WITH a `Retry-After` that fails to parse as a positive integer — is
+ * terminal: throws `GithubOidcExchangeError` immediately, never retries.
  */
 async function exchangeGithubOidc(opts) {
     const fetchImpl = opts.fetchImpl ?? fetch;
@@ -31413,8 +31414,16 @@ async function exchangeGithubOidc(opts) {
         const retryAfter = response.headers.get('retry-after');
         if ((response.status === 429 || response.status === 503) && retryAfter !== null) {
             const delaySeconds = Number.parseInt(retryAfter, 10);
-            await sleep(delaySeconds * 1000);
-            continue;
+            // A present-but-malformed Retry-After value (non-numeric, or a
+            // negative/non-positive integer) must be treated the same as an
+            // ABSENT Retry-After header — terminal failure, no retry. Retrying
+            // with NaN/negative would otherwise reach setTimeout(fn, NaN or < 0),
+            // both of which Node coerces to fire almost immediately (audit round
+            // 1, Sho MEDIUM), silently defeating the intended backoff.
+            if (Number.isInteger(delaySeconds) && delaySeconds > 0) {
+                await sleep(delaySeconds * 1000);
+                continue;
+            }
         }
         const { code, description } = await parseErrorBody(response);
         throw new GithubOidcExchangeError(code, description, response.status);
