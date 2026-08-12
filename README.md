@@ -12,6 +12,13 @@ picks it up automatically.
 - Optional automatic `TF_TOKEN_<host>` export for zero-config backend auth
 - Token is registered as a masked secret by default
 
+> **Note:** if you found this repo by searching for "polaris-actions," there are
+> two other, similarly-named Croonix repos that are **not** this one:
+> `croonix/int-polaris-actions` (a private, general-purpose internal Actions
+> hub, unrelated to this product) and `croonix/polaris-actions-e2e` (a private
+> test harness used internally to validate this action end-to-end). Neither is
+> public; if you can see this README, you're already in the right repo.
+
 ## Usage
 
 **Always pin by commit SHA, never by a floating tag like `@v1`, in your own
@@ -37,7 +44,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Authenticate to Polaris
-        uses: croonix/polaris-actions/login@a4c75011c8c7a2d758abaaa0c17f0de49fbb6f1c # v1.0.0
+        uses: croonix/polaris-actions/login@7cf5fb442f196edb78591a404828619bce6811a7 # v1.0.1
         with:
           polaris-url: https://polaris.example.com
 
@@ -63,7 +70,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Authenticate to Polaris
-        uses: croonix/polaris-actions/login@a4c75011c8c7a2d758abaaa0c17f0de49fbb6f1c # v1.0.0
+        uses: croonix/polaris-actions/login@7cf5fb442f196edb78591a404828619bce6811a7 # v1.0.1
         with:
           polaris-url: https://polaris.example.com
 
