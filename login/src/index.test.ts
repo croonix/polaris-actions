@@ -382,6 +382,49 @@ describe('exchangeGithubOidc — retry semantics', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
+  // Audit round 1, Sho finding (MEDIUM): a malformed (non-numeric) Retry-After
+  // value made Number.parseInt() return NaN, and setTimeout(fn, NaN) fires
+  // almost immediately (0-10ms) instead of being treated as terminal — same
+  // posture as the "WITHOUT a Retry-After header" case directly above. A
+  // present-but-garbage header must not be treated more favourably (i.e.
+  // retried) than an absent one. Second mockResolvedValueOnce below is a
+  // bug-detector: if the fix regresses and a retry fires, the second call
+  // would return a distinct, easily-identifiable response. Real timers are
+  // used here (not the describe block's fake timers) because the bug this
+  // guards against fires the retry almost immediately in real time — the
+  // fix must reject with zero elapsed delay, not merely "before some fake
+  // timer is advanced".
+  it('fails immediately (no wait, no retry) on 429/503 with a non-numeric Retry-After value', async () => {
+    vi.useRealTimers()
+    const { exchangeGithubOidc, GithubOidcExchangeError } = await import('./index.js')
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        errorResponse(503, 'provider_unavailable', 'jwks unreachable', { 'Retry-After': 'not-a-number' }),
+      )
+      .mockResolvedValueOnce(errorResponse(500, 'unexpected_retry', 'a retry happened when it should not have'))
+
+    await expect(
+      exchangeGithubOidc({ polarisUrl: 'https://polaris.example.com', idToken: 't', fetchImpl }),
+    ).rejects.toThrow(GithubOidcExchangeError)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails immediately (no wait, no retry) on 429/503 with a negative Retry-After value', async () => {
+    vi.useRealTimers()
+    const { exchangeGithubOidc, GithubOidcExchangeError } = await import('./index.js')
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(errorResponse(429, 'rate_limited', 'too many requests', { 'Retry-After': '-5' }))
+      .mockResolvedValueOnce(errorResponse(500, 'unexpected_retry', 'a retry happened when it should not have'))
+
+    await expect(
+      exchangeGithubOidc({ polarisUrl: 'https://polaris.example.com', idToken: 't', fetchImpl }),
+    ).rejects.toThrow(GithubOidcExchangeError)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+
   it('does not retry any 4xx other than 429 (403 untrusted_repository is terminal)', async () => {
     const { exchangeGithubOidc, GithubOidcExchangeError } = await import('./index.js')
     const fetchImpl = vi
