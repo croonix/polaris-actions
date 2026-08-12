@@ -33,6 +33,13 @@
  *     → if `export-tf-token !== 'false'`: `exportVariable(tfTokenEnvName(host), token)`. On failure:
  *     `core.setFailed(`code: description`)`, and `run()` resolves normally (never throws out).
  * @edge-cases
+ *   - `polaris-url` absent/empty: MUST fail fast via `core.getInput('polaris-url', { required: true })`
+ *     with @actions/core's own `Input required and not supplied: polaris-url` message, BEFORE any
+ *     audience derivation or network call. Bug 2a (this handoff): `run()` currently omits the
+ *     `{ required: true }` second argument, so `getInput` silently returns `''` instead of throwing —
+ *     the empty string then flows into `deriveAudience`/`canonicalizeAudienceHost`, which throws its
+ *     own unrelated `audience host is empty` message. That message is misleading: an operator who
+ *     forgot `polaris-url` sees an "audience" error, not a "you forgot polaris-url" error.
  *   - 429/503 WITHOUT `Retry-After`: Shin's filled-in fallback (this combination was left
  *     undefined upstream) — treated as TERMINAL, no wait, immediate failure. Flagged for
  *     Kou/rodo confirmation.
@@ -623,6 +630,60 @@ describe('run — orchestration', () => {
     const { run } = await import('./index.js')
     await expect(run()).resolves.not.toThrow()
     expect(core.setFailed).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Section 6: bug 2a — `polaris-url` is `required: true` in action.yml, but
+// run() calls `core.getInput('polaris-url')` WITHOUT `{ required: true }`.
+// @actions/core then returns '' instead of throwing, so the eventual failure
+// (if any) comes from somewhere unrelated further down the call chain,
+// instead of a clear "you forgot polaris-url" message at the point of entry.
+// ---------------------------------------------------------------------------
+
+describe('run — bug 2a: missing required polaris-url must fail fast with a clear message', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('calls core.setFailed with a message identifying polaris-url as missing, and makes NO HTTP call (RED until getInput passes { required: true })', async () => {
+    // Mirrors @actions/core's real getInput(name, { required }) contract: when `required` is
+    // true and the resolved value is empty, it throws `Input required and not supplied: <name>`
+    // BEFORE returning to the caller. Today, index.ts calls `core.getInput('polaris-url')`
+    // WITHOUT the required flag (bug 2a), so this mock's `required` branch is never reached by
+    // the current implementation — getInput silently returns '', and the actual failure comes
+    // from deriveAudience -> canonicalizeAudienceHost's unrelated "audience host is empty"
+    // instead. That mismatch (expected: a clear "polaris-url" message; actual: a confusing
+    // "audience host is empty" message) is exactly what this test pins down as RED.
+    vi.mocked(core.getInput).mockImplementation((name: string, options?: { required?: boolean }) => {
+      const values: Record<string, string> = { 'polaris-url': '', audience: '', account: '' }
+      const value = values[name] ?? ''
+      if (options?.required === true && value === '') {
+        throw new Error(`Input required and not supplied: ${name}`)
+      }
+      return value
+    })
+    vi.mocked(core.getBooleanInput).mockImplementation((name: string) => {
+      if (name === 'export-tf-token' || name === 'mask-token') return true
+      return false
+    })
+
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const { run } = await import('./index.js')
+    await run()
+
+    // Fail-fast: no network call must happen when a required input is missing.
+    expect(fetchSpy).not.toHaveBeenCalled()
+
+    expect(core.setFailed).toHaveBeenCalledTimes(1)
+    const [message] = vi.mocked(core.setFailed).mock.calls[0]
+    // Post-fix expectation: the message must clearly name the missing input.
+    expect(String(message)).toMatch(/polaris-url/i)
   })
 })
 
