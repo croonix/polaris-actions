@@ -8,6 +8,7 @@
 // optionally export TF_TOKEN_<host> for subsequent tofu/terraform steps.
 
 import * as core from '@actions/core'
+import { pathToFileURL } from 'node:url'
 
 // ---------------------------------------------------------------------------
 // TF_TOKEN_<host> env var name
@@ -216,7 +217,7 @@ export async function exchangeGithubOidc(opts: {
 
 export async function run(): Promise<void> {
   try {
-    const polarisUrl = core.getInput('polaris-url')
+    const polarisUrl = core.getInput('polaris-url', { required: true })
     const audienceInput = core.getInput('audience')
     const accountInput = core.getInput('account')
     const exportTfToken = core.getBooleanInput('export-tf-token')
@@ -255,6 +256,14 @@ export async function run(): Promise<void> {
   }
 }
 
-if (require.main === module) {
+// ESM-correct entrypoint detection: `require.main === module` never fires in
+// ncc's ESM bundle output, because webpack's `hmd()` harmony-module decorator
+// reassigns `module` to `Object.create(module)` — a new object whose identity
+// never matches the module cache, so the guard is always false once bundled
+// (though it works when this file runs unbundled under a CJS test loader).
+// Comparing `import.meta.url` against the file URL of the process's entry
+// script (`process.argv[1]`) is Node's own documented ESM replacement and
+// survives ncc's bundling/concatenation intact.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   void run()
 }
